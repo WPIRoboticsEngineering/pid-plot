@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$USER_HOME$/PycharmProjects/pid-plot/.idea/pid-plot.iml" filepath="$USER_HOME$/PycharmProjects/pid-plot/.idea/pid-plot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/pid-plot.iml" filepath="$PROJECT_DIR$/.idea/pid-plot.iml" />
     </modules>
   </component>
 </project>

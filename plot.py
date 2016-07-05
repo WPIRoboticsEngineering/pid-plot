@@ -15,6 +15,28 @@ from collections import deque
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+from serial.tools import list_ports
+
+# define your data format here.
+# for example:
+#
+# python side
+# plot_items = ['Actual', 'Set', 'Control input']
+# display_number_items = ['kP', 'kI', 'kD']
+#
+# arduino should print
+# 1.0,1.0,1.0,1.0,1.0,1.0\n
+#
+# print each item in order define below,
+# use comma as deliminator
+# use a new line character to indicate current set of data
+
+# will show as line plot
+plot_items = ['Actual', 'Set']
+# will not show up on the plot but will display number
+display_number_items = ['kP', 'kI', 'kD','u','err','sum_err','diff_err']
+
+points_on_screen = 1000
 
 # plot class
 class AnalogPlot:
@@ -23,67 +45,55 @@ class AnalogPlot:
         # open serial port
         self.ser = serial.Serial(strPort, 115200)
 
-        # self.ax = deque([0.0]*maxLen)
-        # self.ay = deque([0.0]*maxLen)
-        self.buffered_values = []
-        for i in range(0, 7):
-            self.buffered_values.append(deque([0.0] * maxLen))
+        self.plot_buffer = []
+        self.display_number_buffer = [0.0] * len(display_number_items)
+        for i in range(0, len(plot_items)):
+            self.plot_buffer.append(deque([0.0] * maxLen))
         self.maxLen = maxLen
 
     # add to buffer
     def addToBuf(self, buf, val):
         if len(buf) < self.maxLen:
-            buf.append(val)
-        else:
-            buf.pop()
             buf.appendleft(val)
+        else:
+            buf.popleft();
+            buf.append(val)
 
     # add data
     def add(self, data):
-        assert (len(data) == 7)
-        for i in range(0, 7):
-            self.addToBuf(self.buffered_values[i], data[i])
-            # self.addToBuf(self.ax, data[0])
-            # self.addToBuf(self.ay, data[1])
-            # self.addToBuf(self.az, data[2])
+        if len(data) == len(plot_items) + len(display_number_items):
+            for i in range(0, len(plot_items)):
+                self.addToBuf(self.plot_buffer[i], data[i])
+            for i in range(0, len(display_number_items)):
+                self.display_number_buffer[i] = data[i + len(plot_items)]
+        else:
+            raise BadSerialMessageException('Data length mismatch. ' +
+                                            'Check your plot/display items config and Arduino code ' + str(data))
 
-    # update plot
-    def update(self, frameNum, axes):
-        try:
-            line = self.ser.readline()
-            data = [float(val) for val in line.split(',')]
-            # print data
-            if (len(data) == 7):
-                self.add(data)
-                for i in range(0, 7):
-                    axes[i].set_data(range(self.maxLen), self.buffered_values[i])
-                    # a0.set_data(range(self.maxLen), self.ax)
-                    # a1.set_data(range(self.maxLen), self.ay)
-        except KeyboardInterrupt:
-            print('exiting')
-        except Exception as e:
-            print(e)
-
-        return axes[0],
 
     def update_serial(self):
         while 1:
             try:
                 line = self.ser.readline()
-                print line
                 data = [float(val) for val in line.split(',')]
-                # print data
-                if (len(data) == 7):
-                    self.add(data)
+                self.add(data)
             except KeyboardInterrupt:
                 print('exiting')
             except Exception as e:
                 print(e)
+                print('raw line: ' + line)
 
-    def update_plot(self, frameNum, axes):
+    def update_plot(self, frameNum, txt, axes):
         try:
-            for i in range(0, 7):
-                axes[i].set_data(range(self.maxLen), self.buffered_values[i])
+            for i in range(0, len(plot_items)):
+                axes[i].set_data(range(self.maxLen), self.plot_buffer[i])
+
+            measurements = ""
+            for i, item in enumerate(display_number_items):
+                measurements += "%s=%f " % (item, self.display_number_buffer[i])
+            txt.set_text(measurements)
+
+
         except KeyboardInterrupt:
             print('exiting')
         except Exception as e:
@@ -99,41 +109,54 @@ class AnalogPlot:
 
     # main() function
 
+class BadSerialMessageException(Exception):
+    pass
 
 def main():
-    # create parser
-    parser = argparse.ArgumentParser(description="LDR serial")
-    # add expected arguments
-    parser.add_argument('--port', dest='port', required=True)
+    # # create parser
+    # parser = argparse.ArgumentParser(description="LDR serial")
+    # # add expected arguments
+    # parser.add_argument('--port', dest='port', required=True)
+    #
+    # # parse args
+    # args = parser.parse_args()
+    #
+    # # strPort = '/dev/tty.usbserial-A7006Yqh'
+    # strPort = args.port
 
-    # parse args
-    args = parser.parse_args()
+    serial_port = getArduinoPort()
 
-    # strPort = '/dev/tty.usbserial-A7006Yqh'
-    strPort = args.port
+    if serial_port is None:
+        print('cannot find Arduino. Are you sure it is plugged in?')
+        while serial_port is None:
+            serial_port = getArduinoPort()
 
-    print('reading from serial port %s...' % strPort)
+    print('reading from serial port %s...' % serial_port)
 
     # plot parameters
-    analogPlot = AnalogPlot(strPort, 2000)
+    analogPlot = AnalogPlot(serial_port, points_on_screen)
 
     t = threading.Thread(target=analogPlot.update_serial)
-    t.start();
+    t.setDaemon(True)
+    t.start()
 
     print('plotting data...')
 
     # set up animation
-    fig = plt.figure()
-    ax = plt.axes(xlim=(0, 2000), ylim=(0, 1023))
+    fig = plt.figure(figsize=(15,8))
+    ax = plt.axes(xlim=(0, points_on_screen), ylim=(-2, 2))
     axes = []
-    for i in range(0, 7):
-        a0 = ax.plot([], [])
+    for i in range(0, len(plot_items)):
+        a0 = ax.plot([], [], label=plot_items[i])
         axes.append(a0[0])
-    # a0, = ax.plot([], [])
-    # a1, = ax.plot([], [])
+    plt.legend()
+    fig.tight_layout()
+
+    txt = plt.figtext(0.1, 0.1, '',family='monospace', fontsize=15)
+
     anim = animation.FuncAnimation(fig, analogPlot.update_plot,
-                                   fargs=(tuple(axes),),
-                                   interval=10)
+                                   fargs=(txt,tuple(axes)),
+                                   interval=20)
 
     # show plot
     plt.show()
@@ -143,6 +166,16 @@ def main():
 
     print('exiting.')
 
+
+
+def getArduinoPort():
+    # Arduino USB serial microcontroller program id data:
+    VENDOR_ID = "2341"
+    PRODUCT_ID = "0042"
+    for port in list(list_ports.comports()):
+        # if "USB VID:PID=%s:%s SER=%s" % (VENDOR_ID, PRODUCT_ID, SERIAL_NUMBER) in port[2]:
+        if "USB VID:PID=%s:%s" % (VENDOR_ID, PRODUCT_ID) in port[2]:
+            return port[0]
 
 # call main
 if __name__ == '__main__':
