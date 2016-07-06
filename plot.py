@@ -34,21 +34,22 @@ from serial.tools import list_ports
 # will show as line plot
 plot_items = ['Actual', 'Set']
 # will not show up on the plot but will display number
-display_number_items = ['kP', 'kI', 'kD','u','err','sum_err','diff_err']
+display_number_items = ['kP', 'kI', 'kD', 'u', 'err', 'sum_err', 'diff_err']
 
 points_on_screen = 1000
 
+
 # plot class
 class AnalogPlot:
-    # constr
     def __init__(self, strPort, maxLen):
-        # open serial port
         self.ser = serial.Serial(strPort, 115200)
 
         self.plot_buffer = []
         self.display_number_buffer = [0.0] * len(display_number_items)
+
         for i in range(0, len(plot_items)):
             self.plot_buffer.append(deque([0.0] * maxLen))
+
         self.maxLen = maxLen
 
     # add to buffer
@@ -69,7 +70,6 @@ class AnalogPlot:
         else:
             raise BadSerialMessageException('Data length mismatch. ' +
                                             'Check your plot/display items config and Arduino code ' + str(data))
-
 
     def update_serial(self):
         while 1:
@@ -107,29 +107,24 @@ class AnalogPlot:
         self.ser.flush()
         self.ser.close()
 
-    # main() function
+        # main() function
+
 
 class BadSerialMessageException(Exception):
     pass
 
+
 def main():
-    # # create parser
-    # parser = argparse.ArgumentParser(description="LDR serial")
-    # # add expected arguments
-    # parser.add_argument('--port', dest='port', required=True)
-    #
-    # # parse args
-    # args = parser.parse_args()
-    #
-    # # strPort = '/dev/tty.usbserial-A7006Yqh'
-    # strPort = args.port
+    print('auto-detecting arduino...')
 
     serial_port = getArduinoPort()
 
     if serial_port is None:
-        print('cannot find Arduino. Are you sure it is plugged in?')
-        while serial_port is None:
-            serial_port = getArduinoPort()
+        print('cannot find Arduino. Are you sure it is plugged in?\n'
+              'Restart the program to auto-detect or manually input the port.')
+        print('available ports: %s' % str([port[0] for port in list_ports.comports()]))
+
+        serial_port = raw_input('Serial port: ')
 
     print('reading from serial port %s...' % serial_port)
 
@@ -143,7 +138,7 @@ def main():
     print('plotting data...')
 
     # set up animation
-    fig = plt.figure(figsize=(15,8))
+    fig = plt.figure(figsize=(15, 8))
     ax = plt.axes(xlim=(0, points_on_screen), ylim=(-2, 2))
     axes = []
     for i in range(0, len(plot_items)):
@@ -152,10 +147,10 @@ def main():
     plt.legend()
     fig.tight_layout()
 
-    txt = plt.figtext(0.1, 0.1, '',family='monospace', fontsize=15)
+    txt = plt.figtext(0.1, 0.1, '', family='monospace', fontsize=15)
 
     anim = animation.FuncAnimation(fig, analogPlot.update_plot,
-                                   fargs=(txt,tuple(axes)),
+                                   fargs=(txt, tuple(axes)),
                                    interval=20)
 
     # show plot
@@ -167,7 +162,6 @@ def main():
     print('exiting.')
 
 
-
 def getArduinoPort():
     # Arduino USB serial microcontroller program id data:
     VENDOR_ID = "2341"
@@ -176,6 +170,7 @@ def getArduinoPort():
         # if "USB VID:PID=%s:%s SER=%s" % (VENDOR_ID, PRODUCT_ID, SERIAL_NUMBER) in port[2]:
         if "USB VID:PID=%s:%s" % (VENDOR_ID, PRODUCT_ID) in port[2]:
             return port[0]
+
 
 # call main
 if __name__ == '__main__':
