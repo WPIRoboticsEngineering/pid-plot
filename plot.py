@@ -1,15 +1,11 @@
 """
-ldr.py
-Display analog data from Arduino using Python (matplotlib)
-Author: Mahesh Venkitachalam
-Website: electronut.in
+Plot data from Arduino
+Modified based on ldr.py by Mahesh Venkitachalam
 """
 
-import sys, serial, argparse
+import serial
 import threading
 
-import numpy as np
-from time import sleep
 from collections import deque
 
 import matplotlib.pyplot as plt
